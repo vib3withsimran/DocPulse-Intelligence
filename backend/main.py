@@ -1,5 +1,8 @@
-from fastapi import FastAPI, UploadFile, File
+import os
+import shutil
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from parser import DocumentParser
 
 app = FastAPI(
     title="Document Intelligence API",
@@ -16,19 +19,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "storage")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+parser = DocumentParser()
+
 @app.get("/")
 def root():
     return {"message": "Document Intelligence API"}
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    # Just return file info for now
-    return {
-        "filename": file.filename,
-        "size": file.size,
-        "status": "received"
-    }
+    # Basic security check to avoid path traversal
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
+    
+    try:
+        # Save file securely in chunks to prevent memory bloat
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Parse the saved document
+        parsed_data = parser.parse(file_path, safe_filename)
+        
+        return {
+            "filename": safe_filename,
+            "size": file.size,
+            "status": "success",
+            "data": parsed_data
+        }
+    except Exception as e:
+        # Cleanup file if save/parse failed
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 @app.get("/health")
 def health():
     return {"status": "alive"}
+
