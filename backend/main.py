@@ -39,6 +39,42 @@ doc_parser = DocumentParser()
 doc_classifier = DocumentClassifier()
 vector_store = VectorStore()
 
+# Database migration to enriched format
+def migrate_database():
+    try:
+        results = vector_store.collection.get()
+        ids_to_delete = []
+        docs_to_add = []
+        metadatas_to_add = []
+        
+        for i in range(len(results['ids'])):
+            doc_id = results['ids'][i]
+            text = results['documents'][i]
+            meta = results['metadatas'][i]
+            
+            if not text.startswith("Document: "):
+                filename = meta.get('filename', 'unknown')
+                page = meta.get('page', 1)
+                enriched_text = f"Document: {filename}\nPage: {page}\nContent:\n{text}"
+                
+                ids_to_delete.append(doc_id)
+                docs_to_add.append(enriched_text)
+                metadatas_to_add.append(meta)
+                
+        if ids_to_delete:
+            print(f"Migrating {len(ids_to_delete)} database documents to enriched format...")
+            vector_store.collection.delete(ids=ids_to_delete)
+            vector_store.collection.add(
+                documents=docs_to_add,
+                metadatas=metadatas_to_add,
+                ids=ids_to_delete
+            )
+            print("Database migration completed successfully!")
+    except Exception as e:
+        print(f"Database migration failed: {e}")
+
+migrate_database()
+
 # In-memory document database simulation
 documents_db = [
     {
@@ -96,7 +132,8 @@ def process_document_task(task_id: str, temp_path: str, filename: str):
                 "has_tables": page.get('has_tables', False),
                 "topics": topics_str
             }
-            vector_store.add_document(page['text'], meta)
+            enriched_text = f"Document: {filename}\nPage: {page['page_number']}\nContent:\n{page['text']}"
+            vector_store.add_document(enriched_text, meta)
             
         # 5. Update global documents_db state
         for doc in documents_db:

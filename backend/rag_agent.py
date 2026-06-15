@@ -29,15 +29,18 @@ class RAGAgent:
             })
         
         # Step 3: Ask LLM with context
-        prompt = f"""Answer the question based ONLY on the context below.
+        prompt = f"""You are PulseAssistant, an expert document intelligence assistant.
+Answer the user's question concisely based on the context below. The context is extracted from documents; the filenames indicate which document the information comes from.
 
 Context:
 {context}
 
 Question: {question}
 
-Answer concisely with specific information from the context.
-If the context doesn't contain the answer, say "I don't have enough information."
+Instructions:
+- Base your answer on the context. If the context contains a submission or project (e.g. from a file named after a hackathon/topic), explain that project's idea/details to answer the query.
+- Be helpful and avoid refusing to answer if the context contains clear relevant details about the project/topic, even if some exact words (like "hackathon") are not literally present.
+- If the context is completely irrelevant, say "I don't have enough information."
 
 Answer:"""
 
