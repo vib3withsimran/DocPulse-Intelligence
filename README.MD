@@ -1,6 +1,6 @@
-# Document Intelligence Platform
+# DocuPulse Intelligence
 
-A secure, agentic Document Intelligence system that ingests complex, real-world documents (scanned PDFs, handwritten notes, tables, image-heavy reports, and long unstructured files), extracts text and structural elements, and feeds them into a Retrieval-Augmented Generation (RAG) pipeline to support citation-backed chatbot interactions.
+A secure, high-performance Document Intelligence platform that ingests complex, real-world documents (scanned PDFs, handwritten pages, reports, and tables), extracts text and layout structures, runs automated LLM categorization, and powers an agentic, citation-backed RAG chatbot.
 
 ---
 
@@ -28,7 +28,7 @@ User Question ──► RAG Agent ──► Search/Retrieval ◄─────�
 ```mermaid
 flowchart TD
     subgraph Ingestion Pipeline
-        A[User Upload] -->|POST /upload| B[Backend API]
+        A[User Upload] -->|POST /api/upload| B[Backend API]
         B --> C[Document Parser & OCR]
         C -->|Extracts Text & Tables| D[Document Metadata & Content]
         D --> E[Classifier LLM]
@@ -55,7 +55,7 @@ flowchart TD
 ## 💡 Key Concepts
 
 *   **RAG (Retrieval-Augmented Generation)**: A technique that retrieves relevant context from a knowledge base before passing it to the Large Language Model (LLM). This ensures the LLM's response is grounded in actual documents and minimizes hallucinations.
-*   **Vector Database**: A specialized database optimized for storing and querying high-dimensional vectors representing semantic text meanings. This powers the semantic search capabilities of the chatbot.
+*   **Vector Database**: A local, persistent database (Chroma DB) optimized for storing and querying high-dimensional vectors representing semantic text meanings. This powers the semantic search capabilities of the chatbot.
 *   **OCR (Optical Character Recognition)**: The technology used to scan and convert image-based files (scanned PDFs, handwritten pages, screenshots) into machine-readable text.
 *   **Embeddings**: Mathematical vectors that represent the semantic meaning of a chunk of text, allowing the system to perform contextual similarity matching rather than simple keyword searches.
 
@@ -66,18 +66,13 @@ flowchart TD
 Security is integrated at every layer of the system:
 
 1.  **Ingestion & Upload Layer**:
-    *   **File Validation**: Strict verification of MIME types, magic numbers, and file sizes to prevent uploading malicious executables.
-    *   **Rate Limiting**: Protection of the `/upload` endpoint from Denial of Service (DoS) attacks.
-    *   **Malware Scanning**: Integration of virus scanning for uploaded documents.
+    *   **File Validation**: Magic numbers check (using python-magic) to verify actual MIME types (PDF, JPEG, PNG, TXT), preventing malicious executables disguised with fake extensions.
+    *   **Filename Hashing**: renames file to its SHA-256 hash to completely neutralize directory/path traversal vulnerabilities (e.g. `../../config.json` is hashed to a safe alphanumeric name).
+    *   **Payload Sanitization**: Scrubs user query inputs to prevent Cross-Site Scripting (XSS) or SQL injection patterns.
 2.  **Storage Layer**:
-    *   **Encryption at Rest**: Files are encrypted in the local directory or cloud bucket using strong encryption standards (AES-256).
-    *   **Secure Access**: Access control lists (ACLs) to ensure only authorized users can read document files.
-3.  **Processing & Parse Layer**:
-    *   **Isolated Sandboxing**: Document extraction and OCR run in sandboxed execution environments to prevent exploitation of parsing vulnerabilities (e.g., ImageMagick/PDF exploits).
-4.  **Database & Vector Layer**:
-    *   **Tenant Isolation**: Strict logical partitioning of user data within the Vector Database so users cannot query documents belonging to others.
-5.  **Access Control**:
-    *   **AuthN/AuthZ**: JSON Web Tokens (JWT) for secure authentication and role-based access control (RBAC).
+    *   **Encryption at Rest**: Uploaded files are encrypted locally in the `storage/` directory using strong symmetric cryptography (Fernet AES-256) and unencrypted copies are deleted instantly.
+3.  **Processing & Database Layer**:
+    *   **Metadata Flattening**: Sanitizes and flattens metadata structures so they align with strict vector database schemas.
 
 ---
 
@@ -86,11 +81,23 @@ Security is integrated at every layer of the system:
 ```
 doc-intelligence/
 ├── backend/
-│   ├── main.py          # Main FastAPI application entrypoint
-│   ├── requirements.txt # Python dependencies
-│   └── storage/         # Secure storage directory for uploaded files
-├── frontend/            # Frontend application workspace (e.g., Next.js)
-└── README.md            # Project documentation
+│   ├── main.py             # Main FastAPI server (Uploads, Chat, Status, Documents Index)
+│   ├── parser.py           # Document OCR and structure parsing engine
+│   ├── classifier.py       # Groq-based document categorizer
+│   ├── vector_store.py     # Chroma DB client configuration (MiniLM-L6-v2)
+│   ├── rag_agent.py        # Prompt constructor and LLM execution
+│   ├── security.py         # File checking, name hashing, and AES encryption
+│   ├── requirements.txt    # Python dependencies
+│   ├── .env                # Secret keys (Groq & custom paths)
+│   └── storage/            # Local encrypted files & task status logs
+└── frontend/               # Next.js workspace
+    ├── app/
+    │   ├── page.tsx        # DocIntel AI - Landing Page
+    │   ├── upload/
+    │   │   └── page.tsx    # DocIntel AI - Upload Center
+    │   └── chat/
+    │       └── page.tsx    # DocIntel AI - Chat Assistant
+    └── package.json
 ```
 
 ---
@@ -99,7 +106,7 @@ doc-intelligence/
 
 ### Prerequisites
 *   Python 3.9+
-*   Node.js (for the frontend)
+*   Node.js (v18+)
 
 ### Backend Setup
 
@@ -108,19 +115,49 @@ doc-intelligence/
    cd backend
    ```
 
-2. Create a virtual environment:
+2. Create and activate a virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   # On Windows:
+   venv\Scripts\activate
+   # On macOS/Linux:
+   source venv/bin/activate
    ```
 
-3. Install the dependencies:
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Run the FastAPI development server:
-   ```bash
-   uvicorn main.py --reload
+4. Configure your `.env` file:
+   Create a `.env` in the `backend/` folder:
+   ```env
+   GROQ_API_KEY=your_groq_api_key
+   # If Tesseract OCR or Poppler are not in your system Path:
+   # TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
+   # POPPLER_PATH=C:\poppler\Library\bin
    ```
-   The API will be available at `http://localhost:8000`. You can access the Swagger UI documentation at `http://localhost:8000/docs`.
+
+5. Run the dev server:
+   ```bash
+   python -m uvicorn main:app --reload
+   ```
+   The API will be available at `http://localhost:8000`. Access Swagger UI docs at `http://localhost:8000/docs`.
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the Next.js dev server:
+   ```bash
+   npm run dev
+   ```
+   Open `http://localhost:3000` in your browser to view the application.

@@ -1,0 +1,28 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache & build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+build/
+dist/
+
+# Secret / config files
+.env
+backend/.env
+frontend/.env
+*.env.local
+
+# Databases & local storage
+backend/chroma_db/
+backend/storage/
+*.sqlite3
+
+# Frontend dependencies & next.js build
+frontend/node_modules/
+frontend/.next/
+frontend/out/

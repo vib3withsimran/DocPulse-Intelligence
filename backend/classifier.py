@@ -42,7 +42,7 @@ JSON:"""
 
         try:
             response = self.client.chat.completions.create(
-                model="llama-3.2-3b-preview",  # Fast and free
+                model="llama-3.1-8b-instant",  # Fast, active and free
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1  # Lower = more consistent
             )

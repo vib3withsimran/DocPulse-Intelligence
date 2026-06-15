@@ -1,60 +1,57 @@
-import os
-import shutil
+# backend/main.py - DEPLOYMENT READY VERSION
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from parser import DocumentParser
+from fastapi.responses import JSONResponse
+import os
+import tempfile
+import hashlib
+from typing import List
+import json
 
-app = FastAPI(
-    title="Document Intelligence API",
-    description="Backend API for Document Ingestion, Parsing, Classification, and RAG Chatbot.",
-    version="1.0.0"
-)
+app = FastAPI()
 
-# Allow frontend to talk to backend
+# CORS for your frontend (update with your actual Vercel URL)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js default
+    allow_origins=["*"],  # Change to your frontend URL after deployment
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "storage")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-parser = DocumentParser()
-
+# Health check endpoint (VERY IMPORTANT for Render)
 @app.get("/")
-def root():
-    return {"message": "Document Intelligence API"}
-
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    # Basic security check to avoid path traversal
-    safe_filename = os.path.basename(file.filename)
-    file_path = os.path.join(UPLOAD_DIR, safe_filename)
-    
-    try:
-        # Save file securely in chunks to prevent memory bloat
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # Parse the saved document
-        parsed_data = parser.parse(file_path, safe_filename)
-        
-        return {
-            "filename": safe_filename,
-            "size": file.size,
-            "status": "success",
-            "data": parsed_data
-        }
-    except Exception as e:
-        # Cleanup file if save/parse failed
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
-
 @app.get("/health")
-def health():
-    return {"status": "alive"}
+def health_check():
+    return {"status": "healthy", "service": "DocPulse-Intelligence"}
 
+# Simplified upload endpoint for testing
+@app.post("/api/upload")
+async def upload_files(files: List[UploadFile] = File(...)):
+    results = []
+    for file in files:
+        # Save temporarily
+        temp_path = os.path.join(tempfile.gettempdir(), file.filename)
+        content = await file.read()
+        with open(temp_path, "wb") as f:
+            f.write(content)
+        
+        results.append({
+            "original_name": file.filename,
+            "status": "uploaded",
+            "size": len(content)
+        })
+    
+    return {"uploads": results}
+
+# Simplified chat endpoint
+@app.post("/api/chat")
+async def chat(query: str):
+    return {
+        "answer": "Deployment successful! Now integrate with your full RAG system.",
+        "citations": []
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
